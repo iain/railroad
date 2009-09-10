@@ -1,10 +1,10 @@
 namespace :doc do
   namespace :diagram do
-    ADDITIONAL_OPTS = "-v -j --hide-magic"
+    ADDITIONAL_OPTS = "-v -j --hide-magic --hide-types"
     RAILROAD = "./vendor/plugins/railroad/bin/railroad"
     desc "Draw model diagram"
     task :models do
-      sh "#{RAILROAD} -i -m -M #{ADDITIONAL_OPTS} | dot -Tsvg | sed 's/font-size:12.00/font-size:11.00/g' > doc/models.svg"
+      sh "#{RAILROAD} -i -M #{ADDITIONAL_OPTS} | dot -Tsvg | sed 's/font-size:12.00/font-size:11.00/g' > doc/models.svg"
     end
 
     desc "Draw controller diagram"

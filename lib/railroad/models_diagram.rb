@@ -81,10 +81,13 @@ class ModelsDiagram < AppDiagram
 
 	content_columns = current_class.content_columns
 	
+
 	if @options.hide_magic 
           magic_fields = [
           # Restful Authentication
           "login", "crypted_password", "salt", "remember_token", "remember_token_expires_at", "activation_code", "activated_at",
+          # AuthLogic
+          "password_salt", "persistence_token", "login_count", "last_request_at", "current_login_at", "last_login_at", "current_login_ip", "last_login_ip",
           # From patch #13351
           # http://wiki.rubyonrails.org/rails/pages/MagicFieldNames
           "created_at", "created_on", "updated_at", "updated_on",
@@ -98,12 +101,12 @@ class ModelsDiagram < AppDiagram
         end
         
         content_columns.each do |a|
-          content_column = a.name
+          content_column = human_attribute_name(current_class, a.name)
           content_column += ' :' + a.type.to_s unless @options.hide_types
           node_attribs << content_column
         end
       end
-      @graph.add_node [node_type, current_class.name, node_attribs]
+      @graph.add_node [node_type, human_name(current_class), node_attribs]
       generated = true
       # Process class associations
       associations = current_class.reflect_on_all_associations
@@ -115,12 +118,12 @@ class ModelsDiagram < AppDiagram
         # associations -= current_class.superclass.reflect_on_all_associations
       end
       associations.each do |a|
-        process_association current_class.name, a
+        process_association current_class.name, a, human_name(current_class), current_class
       end
     elsif @options.all && (current_class.is_a? Class)
       # Not ActiveRecord::Base model
       node_type = @options.brief ? 'class-brief' : 'class'
-      @graph.add_node [node_type, current_class.name]
+      @graph.add_node [node_type, human_name(current_class)]
       generated = true
     elsif @options.modules && (current_class.is_a? Module)
         @graph.add_node ['module', current_class.name]
@@ -130,33 +133,37 @@ class ModelsDiagram < AppDiagram
     if @options.inheritance && generated && 
        (current_class.superclass != ActiveRecord::Base) &&
        (current_class.superclass != Object)
-      @graph.add_edge ['is-a', current_class.superclass.name, current_class.name]
+      @graph.add_edge ['is-a', human_name(current_class.superclass), human_name(current_class)]
     end      
 
   end # process_class
 
   # Process a model association
-  def process_association(class_name, assoc)
+  def process_association(class_name, assoc, human_name, klass)
 
     STDERR.print "\t\tProcessing model association #{assoc.name.to_s}\n" if @options.verbose
 
     # Skip "belongs_to" associations
-    return if assoc.macro.to_s == 'belongs_to'
+    #return if assoc.macro.to_s == 'belongs_to'
+    return if assoc.macro.to_s == 'has_many' && !assoc.options[:through]
+
+    attribute_name = assoc.options[:foreign_key] || assoc.name.to_s + "_id"
 
     # Only non standard association names needs a label
     
     # from patch #12384
     # if assoc.class_name == assoc.name.to_s.singularize.camelize
-    assoc_class_name = (assoc.class_name.respond_to? 'underscore') ? assoc.class_name.underscore.singularize.camelize : assoc.class_name 
-    if assoc_class_name == assoc.name.to_s.singularize.camelize
+    assoc_class_name = (assoc.class_name.respond_to? 'underscore') ? assoc.class_name.underscore.camelize : assoc.class_name 
+    if assoc_class_name == assoc.name.to_s.camelize
       assoc_name = ''
     else
-      assoc_name = assoc.name.to_s
+      assoc_name = human_attribute_name(klass, attribute_name)
     end 
+    STDERR.print klass.name.to_s + "(" + attribute_name + ") = " + assoc_name + "\n"
 #    STDERR.print "#{assoc_name}\n"
     if assoc.macro.to_s == 'has_one' 
       assoc_type = 'one-one'
-    elsif assoc.macro.to_s == 'has_many' && (! assoc.options[:through])
+    elsif assoc.macro.to_s == 'belongs_to'
       assoc_type = 'one-many'
     else # habtm or has_many, :through
       return if @habtm.include? [assoc.class_name, class_name, assoc_name]
@@ -165,7 +172,15 @@ class ModelsDiagram < AppDiagram
     end  
     # from patch #12384    
     # @graph.add_edge [assoc_type, class_name, assoc.class_name, assoc_name]
-    @graph.add_edge [assoc_type, class_name, assoc_class_name, assoc_name]    
+    @graph.add_edge [assoc_type, human_name, human_name(assoc.klass), assoc_name]    
   end # process_association
+
+  def human_name(klass)
+    klass.respond_to?(:human_name) ? klass.human_name : klass.name
+  end
+
+  def human_attribute_name(klass, attribute_name)
+    klass.respond_to?(:human_attribute_name) ? klass.human_attribute_name(attribute_name.to_s) : attribute_name.to_s
+  end
 
 end # class ModelsDiagram
